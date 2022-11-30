@@ -2,7 +2,7 @@
 module ID(
     input wire clk,
     input wire rst,
-    // input wire flush,
+    // input wire flush,            稍微更改一下注释
     input wire [`StallBus-1:0] stall,
     
     output wire stallreq,
