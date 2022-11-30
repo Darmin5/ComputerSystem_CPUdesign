@@ -17,7 +17,7 @@ module EX(
 
     reg [`ID_TO_EX_WD-1:0] id_to_ex_bus_r;
 
-    always @ (posedge clk) begin
+    always @ (posedge clk) begin        //和ID一样，在开始时先将ID段传来的信息锁到寄存器里,在下一个周期取寄存器中的内容执行
         if (rst) begin
             id_to_ex_bus_r <= `ID_TO_EX_WD'b0;
         end
@@ -44,7 +44,7 @@ module EX(
     wire [31:0] rf_rdata1, rf_rdata2;
     reg is_in_delayslot;
 
-    assign {
+    assign {            //将信息进行解包
         ex_pc,          // 148:117
         inst,           // 116:85
         alu_op,         // 84:83
@@ -59,6 +59,8 @@ module EX(
         rf_rdata2          // 31:0
     } = id_to_ex_bus_r;
 
+
+    //alu运算单元
     wire [31:0] imm_sign_extend, imm_zero_extend, sa_zero_extend;
     assign imm_sign_extend = {{16{inst[15]}},inst[15:0]};
     assign imm_zero_extend = {16'b0, inst[15:0]};
@@ -80,10 +82,13 @@ module EX(
         .alu_src2    (alu_src2    ),
         .alu_result  (alu_result  )
     );
+    //这里和书上讲的有点不太一样，书上的访存请求是MEN段发出的，而这里的访存请求是EX段发出的
+    //load & store（to do）
+
 
     assign ex_result = alu_result;
 
-    assign ex_to_mem_bus = {
+    assign ex_to_mem_bus = {        //将EX段封装成一条总线
         ex_pc,          // 75:44
         data_ram_en,    // 43
         data_ram_wen,   // 42:39
@@ -92,6 +97,14 @@ module EX(
         rf_waddr,       // 36:32
         ex_result       // 31:0
     };
+
+    //forwarding线路，解决数据相关的
+    // assign ex_to_rf_bus = {
+    //     hilo_bus,
+    //     rf_we,
+    //     rf_waddr,
+    //     ex_result
+    // };
 
     // MUL part
     wire [63:0] mul_result;

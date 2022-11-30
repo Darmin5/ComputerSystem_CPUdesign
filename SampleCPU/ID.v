@@ -27,7 +27,7 @@ module ID(
     wire [4:0] wb_rf_waddr;
     wire [31:0] wb_rf_wdata;
 
-    always @ (posedge clk) begin
+    always @ (posedge clk) begin        //if_to_id的信息传过来，在每个时钟周期的上沿
         if (rst) begin
             if_to_id_bus_r <= `IF_TO_ID_WD'b0;        
         end
@@ -37,23 +37,29 @@ module ID(
         else if (stall[1]==`Stop && stall[2]==`NoStop) begin
             if_to_id_bus_r <= `IF_TO_ID_WD'b0;
         end
-        else if (stall[1]==`NoStop) begin
+        else if (stall[1]==`NoStop) begin       //如果没有特殊情况，就会把信息赋给if_to_id_bus_r寄存器，所有ID段执行的指令都要从这个寄存器里取
             if_to_id_bus_r <= if_to_id_bus;
         end
     end
     
+    //从inst ram中取指
     assign inst = inst_sram_rdata;
     assign {
         ce,
         id_pc
     } = if_to_id_bus_r;
-    assign {
+
+
+    //forwarding线路，将ex,mem,wb封装的线路在这里了解包
+    assign {            //WB段前递的路径，在regfile里面实现了(即上课说的前半段周期写回，后半段周期递给ID)
         wb_rf_we,
         wb_rf_waddr,
         wb_rf_wdata
     } = wb_to_rf_bus;
 
-    wire [5:0] opcode;
+
+    //设置一些必要线路
+    wire [5:0] opcode;      //操作码
     wire [4:0] rs,rt,rd,sa;
     wire [5:0] func;
     wire [15:0] imm;
@@ -80,6 +86,7 @@ module ID(
 
     wire [31:0] rdata1, rdata2;
 
+    //operation for regfile
     regfile u_regfile(
     	.clk    (clk    ),
         .raddr1 (rs ),
@@ -91,6 +98,12 @@ module ID(
         .wdata  (wb_rf_wdata  )
     );
 
+    //hi & lo reg for mul and div(to do)
+
+
+
+//decode inst   
+    //locate content of inst
     assign opcode = inst[31:26];
     assign rs = inst[25:21];
     assign rt = inst[20:16];
@@ -104,12 +117,29 @@ module ID(
     assign offset = inst[15:0];
     assign sel = inst[2:0];
 
-    wire inst_ori, inst_lui, inst_addiu, inst_beq;
 
+    //candidate inst & opetion      操作：如果判断当前inst是某条指令，则对应指令的wire变为1,如判断当前inst是add指令，则inst_add <=2'b1
+    wire inst_add,  inst_addi,  inst_addu,  inst_addiu;
+    wire inst_sub,  inst_subu,  inst_slt,   inst_slti;
+    wire inst_sltu, inst_sltiu, inst_div,   inst_divu;
+    wire inst_mult, inst_multu, inst_and,   inst_andi;
+    wire inst_lui,  inst_nor,   inst_or,    inst_ori;
+    wire inst_xor,  inst_xori,  inst_sllv,  inst_sll;
+    wire inst_srav, instsra,    inst_srlv,  inst_srl;
+    wire inst_beq,  inst_bne,   inst_bgez,  inst_bgtz;
+    wire inst_blez, inst_bltz,  inst_bgezal,inst_bltzal;
+    wire inst_j,    inst_jal,   inst_jr,    inst_jalr;
+    wire inst_mfhi, inst_mflo,  inst_mthi,  inst_mtlo;
+    wire inst_break,inst_syscall;
+    wire inst_lb,   inst_lbu,   inst_lh,    inst_lhu,   inst_lw;
+    wire inst_sb,   inst_sh,    inst_sw;
+    wire inst_eret, inst_nfc0,  inst_mtc0;
+
+    //控制alu运算单元的
     wire op_add, op_sub, op_slt, op_sltu;
     wire op_and, op_nor, op_or, op_xor;
     wire op_sll, op_srl, op_sra, op_lui;
-
+    //解码器
     decoder_6_64 u0_decoder_6_64(
     	.in  (opcode  ),
         .out (op_d )
@@ -130,14 +160,14 @@ module ID(
         .out (rt_d )
     );
 
-    
+    //操作码
     assign inst_ori     = op_d[6'b00_1101];
     assign inst_lui     = op_d[6'b00_1111];
     assign inst_addiu   = op_d[6'b00_1001];
     assign inst_beq     = op_d[6'b00_0100];
 
 
-
+    //选操作数
     // rs to reg1
     assign sel_alu_src1[0] = inst_ori | inst_addiu;
 
@@ -161,7 +191,7 @@ module ID(
     assign sel_alu_src2[3] = inst_ori;
 
 
-
+    //choose the op to be applied   选操作逻辑
     assign op_add = inst_addiu;
     assign op_sub = 1'b0;
     assign op_slt = 1'b0;
@@ -180,7 +210,7 @@ module ID(
                      op_sll, op_srl, op_sra, op_lui};
 
 
-
+    //关于指令写回的内容
     // load and store enable
     assign data_ram_en = 1'b0;
 
@@ -188,27 +218,28 @@ module ID(
     assign data_ram_wen = 1'b0;
 
 
-
+    //一些写回数的操作,包括是否要写回regfile寄存器堆、要存在哪一位里
     // regfile store enable
     assign rf_we = inst_ori | inst_lui | inst_addiu;
 
 
 
     // store in [rd]
-    assign sel_rf_dst[0] = 1'b0;
+    assign sel_rf_dst[0] = 1'b0;        //例如要是想存在rd堆里
     // store in [rt] 
     assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu;
     // store in [31]
     assign sel_rf_dst[2] = 1'b0;
 
     // sel for regfile address
-    assign rf_waddr = {5{sel_rf_dst[0]}} & rd 
+    assign rf_waddr = {5{sel_rf_dst[0]}} & rd   //则会把他扩展成5位
                     | {5{sel_rf_dst[1]}} & rt
                     | {5{sel_rf_dst[2]}} & 32'd31;
 
     // 0 from alu_res ; 1 from ld_res
     assign sel_rf_res = 1'b0; 
 
+    //一条指令解码结束，把信息封装好，传给EX段
     assign id_to_ex_bus = {
         id_pc,          // 158:127
         inst,           // 126:95
@@ -224,7 +255,7 @@ module ID(
         rdata2          // 31:0
     };
 
-
+    //跳转模块
     wire br_e;
     wire [31:0] br_addr;
     wire rs_eq_rt;

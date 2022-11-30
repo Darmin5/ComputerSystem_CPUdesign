@@ -1,5 +1,5 @@
 `include "lib/defines.vh"
-module mycpu_core(
+module mycpu_core(          //上课所说的流水线中的连线就是在这部分实现
     input wire clk,
     input wire rst,
     input wire [5:0] int,
@@ -25,9 +25,9 @@ module mycpu_core(
     wire [`ID_TO_EX_WD-1:0] id_to_ex_bus;
     wire [`EX_TO_MEM_WD-1:0] ex_to_mem_bus;
     wire [`MEM_TO_WB_WD-1:0] mem_to_wb_bus;
-    wire [`BR_WD-1:0] br_bus; 
+    wire [`BR_WD-1:0] br_bus;           //跳转指令
     wire [`DATA_SRAM_WD-1:0] ex_dt_sram_bus;
-    wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus;
+    wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus;       //..._to_rf_bus即为数据通路，是用来进行forwarding解决RAW数据相关的
     wire [`StallBus-1:0] stall;
 
     IF u_IF(
@@ -35,7 +35,7 @@ module mycpu_core(
         .rst             (rst             ),
         .stall           (stall           ),
         .br_bus          (br_bus          ),
-        .if_to_id_bus    (if_to_id_bus    ),
+        .if_to_id_bus    (if_to_id_bus    ),            //例如这里if_to_id_bus是IF段的输出
         .inst_sram_en    (inst_sram_en    ),
         .inst_sram_wen   (inst_sram_wen   ),
         .inst_sram_addr  (inst_sram_addr  ),
@@ -48,7 +48,7 @@ module mycpu_core(
         .rst             (rst             ),
         .stall           (stall           ),
         .stallreq        (stallreq        ),
-        .if_to_id_bus    (if_to_id_bus    ),
+        .if_to_id_bus    (if_to_id_bus    ),            //而if_to_id_bus作为ID段的输入,即为连线
         .inst_sram_rdata (inst_sram_rdata ),
         .wb_to_rf_bus    (wb_to_rf_bus    ),
         .id_to_ex_bus    (id_to_ex_bus    ),

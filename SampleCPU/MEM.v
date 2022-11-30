@@ -59,7 +59,13 @@ module MEM(
         rf_wdata    // 31:0
     };
 
-
+    //forwarding线路,解决数据相关的,其实就是把是否要写回（rf_we），写回到哪儿(rf_waddr)，写回的内容(rf_wdata)等信息封装成一条线,在ID段解包
+    // assign men_to_rf_bus = {
+    //     hilo_bus,
+    //     rf_we,
+    //     rf_waddr,
+    //     rf_wdata
+    // };
 
 
 endmodule
