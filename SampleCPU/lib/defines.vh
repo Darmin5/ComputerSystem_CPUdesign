@@ -5,6 +5,8 @@
 `define BR_WD 33
 `define DATA_SRAM_WD 69
 `define WB_TO_RF_WD 38
+`define MEM_TO_RF_WD 38
+`define EX_TO_RF_WD 38
 
 `define StallBus 6
 `define NoStop 1'b0

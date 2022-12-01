@@ -7,25 +7,27 @@ module ID(
     
     output wire stallreq,
 
-    input wire [`IF_TO_ID_WD-1:0] if_to_id_bus,
+    input wire [`IF_TO_ID_WD-1:0] if_to_id_bus,     //if段传到id段的信息
 
-    input wire [31:0] inst_sram_rdata,
+    input wire [31:0] inst_sram_rdata,          //指令要读取的数据
 
-    input wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus,
+    input wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus, //wb段前向的信息
+    input wire [`EX_TO_RF_WD-1:0] ex_to_rf_bus, //ex段前向的信息
+    input wire [`MEM_TO_RF_WD-1:0] mem_to_rf_bus, //mem段前向的信息
 
-    output wire [`ID_TO_EX_WD-1:0] id_to_ex_bus,
+    output wire [`ID_TO_EX_WD-1:0] id_to_ex_bus,        //id段传向ex段的信息
 
-    output wire [`BR_WD-1:0] br_bus 
+    output wire [`BR_WD-1:0] br_bus         //跳转指令
 );
 
-    reg [`IF_TO_ID_WD-1:0] if_to_id_bus_r;
-    wire [31:0] inst;
-    wire [31:0] id_pc;
-    wire ce;
+    reg [`IF_TO_ID_WD-1:0] if_to_id_bus_r;      //临时寄存器，用来存储if段传来的信息
+    wire [31:0] inst;           //指令
+    wire [31:0] id_pc;          //id段的pc值
+    wire ce;                    //使能信号
 
-    wire wb_rf_we;
-    wire [4:0] wb_rf_waddr;
-    wire [31:0] wb_rf_wdata;
+    wire wb_rf_we;              //是否前向的使能信号？
+    wire [4:0] wb_rf_waddr;     //wb前向信号中的“目标地址”
+    wire [31:0] wb_rf_wdata;    //wb前向新号中的"传输数据"
 
     always @ (posedge clk) begin        //if_to_id的信息传过来，在每个时钟周期的上沿
         if (rst) begin
@@ -57,6 +59,18 @@ module ID(
         wb_rf_wdata
     } = wb_to_rf_bus;
 
+    assign {
+        ex_rf_we,
+        ex_rf_waddr,
+        ex_rf_wdata
+    } = ex_to_rf_bus;
+
+    assign {
+        mem_rf_we,
+        mem_rf_waddr,
+        mem_rf_wdata
+    } = mem_to_rf_bus;
+
 
     //设置一些必要线路
     wire [5:0] opcode;      //操作码
@@ -67,14 +81,14 @@ module ID(
     wire [19:0] code;
     wire [4:0] base;
     wire [15:0] offset;
-    wire [2:0] sel;
+    wire [2:0] sel;                 //指令要运算的类型,例如逻辑运算，移位运算、算术运算等
 
     wire [63:0] op_d, func_d;
     wire [31:0] rs_d, rt_d, rd_d, sa_d;
 
     wire [2:0] sel_alu_src1;
     wire [3:0] sel_alu_src2;
-    wire [11:0] alu_op;
+    wire [11:0] alu_op;             //指令要运算的子类型，子类型是比类型更详细的运算类型，如当运算类型是逻辑运算时，子类型可以是“或”、“与”等运算
 
     wire data_ram_en;
     wire [3:0] data_ram_wen;
@@ -97,6 +111,16 @@ module ID(
         .waddr  (wb_rf_waddr  ),
         .wdata  (wb_rf_wdata  )
     );
+    //前推线路，修改操作数
+    assign rdata1 = (ex_rf_we && (ex_rf_waddr == rs)) ? ex_rf_wdata:
+                    (mem_rf_we && (mem_rf_waddr == rs)) ? mem_rf_wdata:
+                    (wb_rf_we && (wb_rf_waddr == rs)) ? wb_rf_wdata:
+                                                        rdata1;
+    assign rdata2 = (ex_rf_we && (ex_rf_waddr == rs)) ? ex_rf_wdata:
+                    (mem_rf_we && (mem_rf_waddr == rs)) ? mem_rf_wdata:
+                    (wb_rf_we && (wb_rf_waddr == rs)) ? wb_rf_wdata:
+                                                        rdata2;                                                    
+
 
     //hi & lo reg for mul and div(to do)
 
@@ -104,17 +128,17 @@ module ID(
 
 //decode inst   
     //locate content of inst
-    assign opcode = inst[31:26];
-    assign rs = inst[25:21];
-    assign rt = inst[20:16];
+    assign opcode = inst[31:26];        //对于ori指令只需要通过判断26-31bit的值，即可判断是否是ori指令
+    assign rs = inst[25:21];            //rs寄存器
+    assign rt = inst[20:16];            //rt寄存器
     assign rd = inst[15:11];
     assign sa = inst[10:6];
     assign func = inst[5:0];
-    assign imm = inst[15:0];
+    assign imm = inst[15:0];            //立即数
     assign instr_index = inst[25:0];
     assign code = inst[25:6];
     assign base = inst[25:21];
-    assign offset = inst[15:0];
+    assign offset = inst[15:0];         //偏移量
     assign sel = inst[2:0];
 
 
@@ -140,9 +164,9 @@ module ID(
     wire op_and, op_nor, op_or, op_xor;
     wire op_sll, op_srl, op_sra, op_lui;
     //解码器
-    decoder_6_64 u0_decoder_6_64(
-    	.in  (opcode  ),
-        .out (op_d )
+    decoder_6_64 u0_decoder_6_64(   
+    	.in  (opcode  ),      //假如opcode的前六位都是0，则可以判断是ori指令      
+        .out (op_d )            //输出一个64bit的信号
     );
 
     decoder_6_64 u1_decoder_6_64(
@@ -167,7 +191,7 @@ module ID(
     assign inst_beq     = op_d[6'b00_0100];
 
 
-    //选操作数
+    //选操作数      这里src1和src2分别是两个存储操作数的寄存器，具体怎么选操作数，在ex段写
     // rs to reg1
     assign sel_alu_src1[0] = inst_ori | inst_addiu;
 
