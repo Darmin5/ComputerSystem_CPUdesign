@@ -29,6 +29,14 @@ module ID(
     wire [4:0] wb_rf_waddr;     //wb前向信号中的“目标地址”
     wire [31:0] wb_rf_wdata;    //wb前向新号中的"传输数据"
 
+    wire ex_rf_we;              //是否前向的使能信号？
+    wire [4:0] ex_rf_waddr;     //ex前向信号中的“目标地址”
+    wire [31:0] ex_rf_wdata;    //ex前向新号中的"传输数据"
+
+    wire mem_rf_we;              //是否前向的使能信号？
+    wire [4:0] mem_rf_waddr;     //mem前向信号中的“目标地址”
+    wire [31:0] mem_rf_wdata;    //mem前向新号中的"传输数据"
+
     always @ (posedge clk) begin        //if_to_id的信息传过来，在每个时钟周期的上沿
         if (rst) begin
             if_to_id_bus_r <= `IF_TO_ID_WD'b0;        
@@ -98,15 +106,15 @@ module ID(
     wire sel_rf_res;
     wire [2:0] sel_rf_dst;
 
-    wire [31:0] rdata1, rdata2;
+    wire [31:0] rdata1, rdata2, rf_rdata1, rf_rdata2;
 
     //operation for regfile
     regfile u_regfile(
     	.clk    (clk    ),
         .raddr1 (rs ),
-        .rdata1 (rdata1 ),
+        .rdata1 (rf_data1 ),
         .raddr2 (rt ),
-        .rdata2 (rdata2 ),
+        .rdata2 (rf_data2 ),
         .we     (wb_rf_we     ),
         .waddr  (wb_rf_waddr  ),
         .wdata  (wb_rf_wdata  )
@@ -115,11 +123,11 @@ module ID(
     assign rdata1 = (ex_rf_we && (ex_rf_waddr == rs)) ? ex_rf_wdata:
                     (mem_rf_we && (mem_rf_waddr == rs)) ? mem_rf_wdata:
                     (wb_rf_we && (wb_rf_waddr == rs)) ? wb_rf_wdata:
-                                                        rdata1;
+                                                        rf_data1;
     assign rdata2 = (ex_rf_we && (ex_rf_waddr == rs)) ? ex_rf_wdata:
                     (mem_rf_we && (mem_rf_waddr == rs)) ? mem_rf_wdata:
                     (wb_rf_we && (wb_rf_waddr == rs)) ? wb_rf_wdata:
-                                                        rdata2;                                                    
+                                                        rf_data2;                                                    
 
 
     //hi & lo reg for mul and div(to do)
