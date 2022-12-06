@@ -124,9 +124,9 @@ module ID(
                     (mem_rf_we && (mem_rf_waddr == rs)) ? mem_rf_wdata:
                     (wb_rf_we && (wb_rf_waddr == rs)) ? wb_rf_wdata:
                                                         rf_data1;
-    assign rdata2 = (ex_rf_we && (ex_rf_waddr == rs)) ? ex_rf_wdata:
-                    (mem_rf_we && (mem_rf_waddr == rs)) ? mem_rf_wdata:
-                    (wb_rf_we && (wb_rf_waddr == rs)) ? wb_rf_wdata:
+    assign rdata2 = (ex_rf_we && (ex_rf_waddr == rt)) ? ex_rf_wdata:
+                    (mem_rf_we && (mem_rf_waddr == rt)) ? mem_rf_wdata:
+                    (wb_rf_we && (wb_rf_waddr == rt)) ? wb_rf_wdata:
                                                         rf_data2;                                                    
 
 
@@ -192,16 +192,28 @@ module ID(
         .out (rt_d )
     );
 
+     decoder_5_32 u2_decoder_5_32(
+    	.in  (rd  ),
+        .out (rd_d )
+    );
+
+     decoder_5_32 u3_decoder_5_32(
+    	.in  (sa  ),
+        .out (sa_d )
+    );
+
     //操作码
     assign inst_ori     = op_d[6'b00_1101];
     assign inst_lui     = op_d[6'b00_1111];
     assign inst_addiu   = op_d[6'b00_1001];
     assign inst_beq     = op_d[6'b00_0100];
+    assign inst_sub     = op_d[6'b00_0000] & sa_d[5'b0_0000] & func_d[6'b10_0010];
+    assign inst_subu    = op_d[6'b00_0000] & sa_d[5'b0_0000] & func_d[6'b10_0011];
 
 
     //选操作数      这里src1和src2分别是两个存储操作数的寄存器，具体怎么选操作数，在ex段写
     // rs to reg1
-    assign sel_alu_src1[0] = inst_ori | inst_addiu;
+    assign sel_alu_src1[0] = inst_ori | inst_addiu | inst_sub | inst_subu;
 
     // pc to reg1
     assign sel_alu_src1[1] = 1'b0;
@@ -211,7 +223,7 @@ module ID(
 
     
     // rt to reg2
-    assign sel_alu_src2[0] = 1'b0;
+    assign sel_alu_src2[0] = inst_sub | inst_subu;
     
     // imm_sign_extend to reg2
     assign sel_alu_src2[1] = inst_lui | inst_addiu;
@@ -225,7 +237,7 @@ module ID(
 
     //choose the op to be applied   选操作逻辑
     assign op_add = inst_addiu;
-    assign op_sub = 1'b0;
+    assign op_sub = inst_sub | inst_subu;
     assign op_slt = 1'b0;
     assign op_sltu = 1'b0;
     assign op_and = 1'b0;
@@ -252,12 +264,12 @@ module ID(
 
     //一些写回数的操作,包括是否要写回regfile寄存器堆、要存在哪一位里
     // regfile store enable
-    assign rf_we = inst_ori | inst_lui | inst_addiu;
+    assign rf_we = inst_ori | inst_lui | inst_addiu | inst_sub | inst_subu;
 
 
 
     // store in [rd]
-    assign sel_rf_dst[0] = 1'b0;        //例如要是想存在rd堆里
+    assign sel_rf_dst[0] = inst_sub | inst_subu;        //例如要是想存在rd堆里
     // store in [rt] 
     assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu;
     // store in [31]
