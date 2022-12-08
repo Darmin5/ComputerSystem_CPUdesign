@@ -106,7 +106,7 @@ module ID(
     wire sel_rf_res;
     wire [2:0] sel_rf_dst;
 
-    wire [31:0] rdata1, rdata2, rf_rdata1, rf_rdata2;
+    wire [31:0] rdata1, rdata2, rf_data1, rf_data2;
 
     //operation for regfile
     regfile u_regfile(
@@ -206,28 +206,33 @@ module ID(
     assign inst_ori     = op_d[6'b00_1101];
     assign inst_lui     = op_d[6'b00_1111];
     assign inst_addiu   = op_d[6'b00_1001];
+    assign inst_addu    = op_d[6'b00_0000] & func_d[6'b10_0001];
     assign inst_beq     = op_d[6'b00_0100];
-    assign inst_sub     = op_d[6'b00_0000] & sa_d[5'b0_0000] & func_d[6'b10_0010];
-    assign inst_subu    = op_d[6'b00_0000] & sa_d[5'b0_0000] & func_d[6'b10_0011];
-    assign inst_j       = op_d[6'b00_0010];
+    assign inst_sub     = op_d[6'b00_0000] & func_d[6'b10_0010];
+    assign inst_subu    = op_d[6'b00_0000] & func_d[6'b10_0011];
+    assign inst_j       = op_d[6'b00_0010];  
     assign inst_jal     = op_d[6'b00_0011];
-    assign inst_jr      = op_d[6'b00_0000] & rd_d[10'b0_0000_0_0000] & sa_d[5'b0_0000] & func_d[6'b001000];
-    assign inst_jalr    = op_d[6'b00_0000] & rd_d[5'b00_0000] & sa_d[5'b0_0000] & func_d[6'b001001]; 
+    assign inst_jr      = op_d[6'b00_0000] & func_d[6'b00_1000];
+    assign inst_jalr    = op_d[6'b00_0000] & func_d[6'b00_1001];
+    assign inst_sll     = op_d[6'b00_0000] & func_d[6'b00_0000];
+    assign inst_or      = op_d[6'b00_0000] & func_d[6'b10_0101];  
+    assign inst_lw      = op_d[6'b10_0011] & func_d[6'b10_0101];
 
 
     //选操作数      这里src1和src2分别是两个存储操作数的寄存器，具体怎么选操作数，在ex段写
     // rs to reg1
-    assign sel_alu_src1[0] = inst_ori | inst_addiu | inst_sub | inst_subu;
+    assign sel_alu_src1[0] = inst_ori | inst_addiu | inst_sub | inst_subu | inst_addu
+                            |inst_or;
 
     // pc to reg1
     assign sel_alu_src1[1] = inst_jal | inst_jalr;
 
     // sa_zero_extend to reg1
-    assign sel_alu_src1[2] = 1'b0;
+    assign sel_alu_src1[2] = inst_sll;
 
     
     // rt to reg2
-    assign sel_alu_src2[0] = inst_sub | inst_subu;
+    assign sel_alu_src2[0] = inst_sub | inst_subu | inst_addu | inst_sll | inst_or;
     
     // imm_sign_extend to reg2
     assign sel_alu_src2[1] = inst_lui | inst_addiu;
@@ -240,15 +245,15 @@ module ID(
 
 
     //choose the op to be applied   选操作逻辑
-    assign op_add = inst_addiu | inst_jal | inst_jalr;
+    assign op_add = inst_addiu | inst_jal | inst_jalr | inst_addu;
     assign op_sub = inst_sub | inst_subu;
     assign op_slt = 1'b0;
     assign op_sltu = 1'b0;
     assign op_and = 1'b0;
     assign op_nor = 1'b0;
-    assign op_or = inst_ori;
+    assign op_or = inst_ori | inst_or;
     assign op_xor = 1'b0;
-    assign op_sll = 1'b0;
+    assign op_sll = inst_sll;
     assign op_srl = 1'b0;
     assign op_sra = 1'b0;
     assign op_lui = inst_lui;
@@ -268,12 +273,13 @@ module ID(
 
     //一些写回数的操作,包括是否要写回regfile寄存器堆、要存在哪一位里
     // regfile store enable
-    assign rf_we = inst_ori | inst_lui | inst_addiu | inst_sub | inst_subu | inst_jal | inst_jalr;
+    assign rf_we = inst_ori | inst_lui | inst_addiu | inst_addu | inst_sub | inst_subu | inst_jal | inst_jalr
+                  |inst_sll | inst_or;
 
 
 
     // store in [rd]
-    assign sel_rf_dst[0] = inst_sub | inst_subu ;        //例如要是想存在rd堆里
+    assign sel_rf_dst[0] = inst_sub | inst_subu |inst_addu | inst_sll | inst_or;        //例如要是想存在rd堆里
     // store in [rt] 
     assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu;
     // store in [31]
@@ -319,8 +325,8 @@ module ID(
     assign br_e = inst_beq & rs_eq_rt 
                 | inst_j |inst_jal | inst_jalr | inst_jr;
     assign br_addr = inst_beq  ? (pc_plus_4 + {{14{inst[15]}},inst[15:0],2'b0}) 
-                    :inst_j    ? (id_pc[31:28],instr_index,2'b0)
-                    :inst_jal  ? (id_pc[32:28],instr_index,2'b0)
+                    :inst_j    ? {id_pc[31:28],instr_index,2'b0}
+                    :inst_jal  ? {id_pc[32:28],instr_index,2'b0}
                     :inst_jr   ? rdata1
                     :inst_jalr ? rdata1 
                     :32'b0;
