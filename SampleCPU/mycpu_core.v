@@ -28,8 +28,8 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
     wire [`BR_WD-1:0] br_bus;           //跳转指令
     wire [`DATA_SRAM_WD-1:0] ex_dt_sram_bus;
     wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus;       //..._to_rf_bus即为数据通路，是用来进行forwarding解决RAW数据相关的
-    wire [`EX_TO_RF_WD-1:0] ex_to_rf_bus, //ex段前向的信息
-    wire [`MEM_TO_RF_WD-1:0] mem_to_rf_bus, //mem段前向的信息
+    wire [`EX_TO_RF_WD-1:0] ex_to_rf_bus; //ex段前向的信息
+    wire [`MEM_TO_RF_WD-1:0] mem_to_rf_bus; //mem段前向的信息
     wire [`StallBus-1:0] stall;
 
     IF u_IF(

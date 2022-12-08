@@ -209,6 +209,10 @@ module ID(
     assign inst_beq     = op_d[6'b00_0100];
     assign inst_sub     = op_d[6'b00_0000] & sa_d[5'b0_0000] & func_d[6'b10_0010];
     assign inst_subu    = op_d[6'b00_0000] & sa_d[5'b0_0000] & func_d[6'b10_0011];
+    assign inst_j       = op_d[6'b00_0010];
+    assign inst_jal     = op_d[6'b00_0011];
+    assign inst_jr      = op_d[6'b00_0000] & rd_d[10'b0_0000_0_0000] & sa_d[5'b0_0000] & func_d[6'b001000];
+    assign inst_jalr    = op_d[6'b00_0000] & rd_d[5'b00_0000] & sa_d[5'b0_0000] & func_d[6'b001001]; 
 
 
     //选操作数      这里src1和src2分别是两个存储操作数的寄存器，具体怎么选操作数，在ex段写
@@ -216,7 +220,7 @@ module ID(
     assign sel_alu_src1[0] = inst_ori | inst_addiu | inst_sub | inst_subu;
 
     // pc to reg1
-    assign sel_alu_src1[1] = 1'b0;
+    assign sel_alu_src1[1] = inst_jal | inst_jalr;
 
     // sa_zero_extend to reg1
     assign sel_alu_src1[2] = 1'b0;
@@ -229,14 +233,14 @@ module ID(
     assign sel_alu_src2[1] = inst_lui | inst_addiu;
 
     // 32'b8 to reg2
-    assign sel_alu_src2[2] = 1'b0;
+    assign sel_alu_src2[2] = inst_jal | inst_jalr;
 
     // imm_zero_extend to reg2
     assign sel_alu_src2[3] = inst_ori;
 
 
     //choose the op to be applied   选操作逻辑
-    assign op_add = inst_addiu;
+    assign op_add = inst_addiu | inst_jal | inst_jalr;
     assign op_sub = inst_sub | inst_subu;
     assign op_slt = 1'b0;
     assign op_sltu = 1'b0;
@@ -264,16 +268,16 @@ module ID(
 
     //一些写回数的操作,包括是否要写回regfile寄存器堆、要存在哪一位里
     // regfile store enable
-    assign rf_we = inst_ori | inst_lui | inst_addiu | inst_sub | inst_subu;
+    assign rf_we = inst_ori | inst_lui | inst_addiu | inst_sub | inst_subu | inst_jal | inst_jalr;
 
 
 
     // store in [rd]
-    assign sel_rf_dst[0] = inst_sub | inst_subu;        //例如要是想存在rd堆里
+    assign sel_rf_dst[0] = inst_sub | inst_subu ;        //例如要是想存在rd堆里
     // store in [rt] 
     assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu;
     // store in [31]
-    assign sel_rf_dst[2] = 1'b0;
+    assign sel_rf_dst[2] = inst_jal | inst_jalr;            //jalr不是存在rd中吗？
 
     // sel for regfile address
     assign rf_waddr = {5{sel_rf_dst[0]}} & rd   //则会把他扩展成5位
@@ -312,8 +316,14 @@ module ID(
 
     assign rs_eq_rt = (rdata1 == rdata2);
 
-    assign br_e = inst_beq & rs_eq_rt;
-    assign br_addr = inst_beq ? (pc_plus_4 + {{14{inst[15]}},inst[15:0],2'b0}) : 32'b0;
+    assign br_e = inst_beq & rs_eq_rt 
+                | inst_j |inst_jal | inst_jalr | inst_jr;
+    assign br_addr = inst_beq  ? (pc_plus_4 + {{14{inst[15]}},inst[15:0],2'b0}) 
+                    :inst_j    ? (id_pc[31:28],instr_index,2'b0)
+                    :inst_jal  ? (id_pc[32:28],instr_index,2'b0)
+                    :inst_jr   ? rdata1
+                    :inst_jalr ? rdata1 
+                    :32'b0;
 
     assign br_bus = {
         br_e,
