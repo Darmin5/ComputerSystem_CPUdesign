@@ -44,8 +44,10 @@ module EX(
     wire sel_rf_res;
     wire [31:0] rf_rdata1, rf_rdata2;
     reg is_in_delayslot;
+    wire [7:0] mem_op;
 
     assign {            //将信息进行解包
+        mem_op,
         ex_pc,          // 148:117
         inst,           // 116:85
         alu_op,         // 84:83
@@ -85,11 +87,35 @@ module EX(
     );
     //这里和书上讲的有点不太一样，书上的访存请求是MEN段发出的，而这里的访存请求是EX段发出的
     //load & store（to do）
+    wire inst_lb, inst_lbu,  inst_lh, inst_lhu, inst_lw;
+    wire inst_sb, inst_sh,   inst_sw;
+
+    assign {inst_lb, inst_lbu, inst_lh, inst_lhu,
+            inst_lw, inst_sb,  inst_sh, inst_sw} = mem_op;
+
+    wire [3:0] byte_sel;
+    wire [3:0] data_ram_sel;
+    decoder_2_4 u_decoder_2_4(
+        .in  (ex_result[1:0]),
+        .out (byte_sel      )
+    );  
+
+    assign data_ram_sel = inst_sb | inst_lb | inst_lbu ? byte_sel :
+                      inst_sh | inst_lh | inst_lhu ? {{2{byte_sel[2]}},{2{byte_sel[0]}}} :
+                      inst_sw | inst_lw ? 4'b1111 : 4'b0000;
+
+    assign data_sram_en     = data_ram_en;
+    assign data_sram_wen    = {4{data_ram_wen}}&data_ram_sel;
+    assign data_sram_addr   = ex_result; 
+    assign data_sram_wdata  = inst_sb ? {4{rf_rdata2[7:0]}}  :
+                              inst_sh ? {2{rf_rdata2[15:0]}} : rf_rdata2;
+
 
 
     assign ex_result = alu_result;
 
     assign ex_to_mem_bus = {        //将EX段封装成一条总线
+        mem_op,
         ex_pc,          // 75:44
         data_ram_en,    // 43
         data_ram_wen,   // 42:39

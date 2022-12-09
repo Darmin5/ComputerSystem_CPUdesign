@@ -97,6 +97,7 @@ module ID(
     wire [2:0] sel_alu_src1;
     wire [3:0] sel_alu_src2;
     wire [11:0] alu_op;             //指令要运算的子类型，子类型是比类型更详细的运算类型，如当运算类型是逻辑运算时，子类型可以是“或”、“与”等运算
+    wire [7:0]  mem_op;
 
     wire data_ram_en;
     wire [3:0] data_ram_wen;
@@ -262,10 +263,15 @@ module ID(
                      op_and, op_nor, op_or, op_xor,
                      op_sll, op_srl, op_sra, op_lui};
 
+    assign mem_op = {inst_lb, inst_lbu, inst_lh, inst_lhu,
+                     inst_lw, inst_sb,  inst_sh, inst_sw};
+
+    
+
 
     //关于指令写回的内容
     // load and store enable
-    assign data_ram_en = 1'b0;
+    assign data_ram_en = inst_lw;
 
     // write enable
     assign data_ram_wen = 1'b0;
@@ -274,16 +280,16 @@ module ID(
     //一些写回数的操作,包括是否要写回regfile寄存器堆、要存在哪一位里
     // regfile store enable
     assign rf_we = inst_ori | inst_lui | inst_addiu | inst_addu | inst_sub | inst_subu | inst_jal | inst_jalr
-                  |inst_sll | inst_or;
+                  |inst_sll | inst_or  | inst_lw;
 
 
 
     // store in [rd]
     assign sel_rf_dst[0] = inst_sub | inst_subu |inst_addu | inst_sll | inst_or;        //例如要是想存在rd堆里
     // store in [rt] 
-    assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu;
+    assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu| inst_lw;
     // store in [31]
-    assign sel_rf_dst[2] = inst_jal | inst_jalr;            //jalr不是存在rd中吗？
+    assign sel_rf_dst[2] = inst_jal | inst_jalr;            //jalr不是存在rd中吗？ --默认先存到31位寄存器中
 
     // sel for regfile address
     assign rf_waddr = {5{sel_rf_dst[0]}} & rd   //则会把他扩展成5位
@@ -291,10 +297,11 @@ module ID(
                     | {5{sel_rf_dst[2]}} & 32'd31;
 
     // 0 from alu_res ; 1 from ld_res
-    assign sel_rf_res = 1'b0; 
+    assign sel_rf_res = inst_lw; 
 
     //一条指令解码结束，把信息封装好，传给EX段
     assign id_to_ex_bus = {
+        mem_op,
         id_pc,          // 158:127
         inst,           // 126:95
         alu_op,         // 94:83
