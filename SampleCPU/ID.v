@@ -4,8 +4,11 @@ module ID(
     input wire rst,
     // input wire flush,            稍微更改一下注释
     input wire [`StallBus-1:0] stall,
+    input wire [7:0] memop_from_ex,
     
-    output wire stallreq,
+    output wire stallreq_for_load,
+//    input wire ex_ram_read,
+//    output stall_for_load,
 
     input wire [`IF_TO_ID_WD-1:0] if_to_id_bus,     //if段传到id段的信息
 
@@ -36,24 +39,38 @@ module ID(
     wire mem_rf_we;              //是否前向的使能信号？
     wire [4:0] mem_rf_waddr;     //mem前向信号中的“目标地址”
     wire [31:0] mem_rf_wdata;    //mem前向新号中的"传输数据"
+    reg  flag;
+    reg [31:0] buf_inst;
 
     always @ (posedge clk) begin        //if_to_id的信息传过来，在每个时钟周期的上沿
         if (rst) begin
-            if_to_id_bus_r <= `IF_TO_ID_WD'b0;        
+            if_to_id_bus_r <= `IF_TO_ID_WD'b0; 
+            flag <= 1'b0;    
+            buf_inst <= 32'b0;   
         end
-        // else if (flush) begin
-        //     ic_to_id_bus <= `IC_TO_ID_WD'b0;
-        // end
+//         else if (flush) begin
+//             ic_to_id_bus <= `IC_TO_ID_WD'b0;
+//         end
         else if (stall[1]==`Stop && stall[2]==`NoStop) begin
             if_to_id_bus_r <= `IF_TO_ID_WD'b0;
+            flag <= 1'b0; 
         end
         else if (stall[1]==`NoStop) begin       //如果没有特殊情况，就会把信息赋给if_to_id_bus_r寄存器，所有ID段执行的指令都要从这个寄存器里取
             if_to_id_bus_r <= if_to_id_bus;
+            flag <= 1'b0; 
+        end
+        else if (stall[1]==`Stop && stall[2]==`Stop && ~flag) begin
+            flag <= 1'b1;
+            buf_inst <= inst_sram_rdata;
         end
     end
     
     //从inst ram中取指
+//    assign inst = ce ? flag ? buf_inst : inst_sram_rdata : 32'b0;
     assign inst = inst_sram_rdata;
+    
+//    assign stall_for_load = ex_ram_read &((ex_rf_we && (ex_rf_waddr == rs)) | (ex_rf_we && (ex_rf_waddr==rt)));
+    
     assign {
         ce,
         id_pc
@@ -128,8 +145,26 @@ module ID(
     assign rdata2 = (ex_rf_we && (ex_rf_waddr == rt)) ? ex_rf_wdata:
                     (mem_rf_we && (mem_rf_waddr == rt)) ? mem_rf_wdata:
                     (wb_rf_we && (wb_rf_waddr == rt)) ? wb_rf_wdata:
-                                                        rf_data2;                                                    
+                                                        rf_data2;  
+                                                        
+    wire ex_inst_lb, ex_inst_lbu,  ex_inst_lh, ex_inst_lhu, ex_inst_lw;
+    wire ex_inst_sb, ex_inst_sh,   ex_inst_sw;   
+    
+    assign {ex_inst_lb, ex_inst_lbu, ex_inst_lh, ex_inst_lhu,
+            ex_inst_lw, ex_inst_sb,  ex_inst_sh, ex_inst_sw} = memop_from_ex;                                                                                                   
 
+    wire stallreq1_loadrelate;
+    wire stallreq2_loadrelate;
+    
+    wire pre_inst_is_load;
+    
+    assign pre_inst_is_load = ex_inst_lb | ex_inst_lbu | ex_inst_lh | ex_inst_lhu
+                             |ex_inst_lw | ex_inst_sb |  ex_inst_sh | ex_inst_sw ? 1'b1 : 1'b0;
+                             
+    assign stallreq1_loadrelate = (pre_inst_is_load == 1'b1 && ex_rf_waddr == rs) ? `Stop : `NoStop;
+    assign stallreq2_loadrelate = (pre_inst_is_load == 1'b1 && ex_rf_waddr == rt) ? `Stop : `NoStop;
+    
+    assign stallreq_for_load = (stallreq1_loadrelate | stallreq2_loadrelate) ? `Stop : `NoStop;
 
     //hi & lo reg for mul and div(to do)
 
@@ -217,13 +252,21 @@ module ID(
     assign inst_jalr    = op_d[6'b00_0000] & func_d[6'b00_1001];
     assign inst_sll     = op_d[6'b00_0000] & func_d[6'b00_0000];
     assign inst_or      = op_d[6'b00_0000] & func_d[6'b10_0101];  
-    assign inst_lw      = op_d[6'b10_0011] & func_d[6'b10_0101];
+    assign inst_lw      = op_d[6'b10_0011];
+    assign inst_lb      = op_d[6'b10_0000];
+    assign inst_lbu     = op_d[6'b10_0100];
+    assign inst_lh      = op_d[6'b10_0001];
+    assign inst_lhu     = op_d[6'b10_0101];
+    assign inst_sb      = op_d[6'b10_1000];
+    assign inst_sh      = op_d[6'b10_1001];
+    assign inst_sw      = op_d[6'b10_1011];
+    assign inst_xor     = op_d[6'b00_0000] & func_d[6'b10_0110];
 
 
     //选操作数      这里src1和src2分别是两个存储操作数的寄存器，具体怎么选操作数，在ex段写
     // rs to reg1
     assign sel_alu_src1[0] = inst_ori | inst_addiu | inst_sub | inst_subu | inst_addu
-                            |inst_or;
+                            |inst_or  | inst_xor   | inst_sw;
 
     // pc to reg1
     assign sel_alu_src1[1] = inst_jal | inst_jalr;
@@ -233,10 +276,10 @@ module ID(
 
     
     // rt to reg2
-    assign sel_alu_src2[0] = inst_sub | inst_subu | inst_addu | inst_sll | inst_or;
+    assign sel_alu_src2[0] = inst_sub | inst_subu | inst_addu | inst_sll | inst_or | inst_xor;
     
     // imm_sign_extend to reg2
-    assign sel_alu_src2[1] = inst_lui | inst_addiu;
+    assign sel_alu_src2[1] = inst_lui | inst_addiu | inst_lw  | inst_sw;
 
     // 32'b8 to reg2
     assign sel_alu_src2[2] = inst_jal | inst_jalr;
@@ -246,14 +289,14 @@ module ID(
 
 
     //choose the op to be applied   选操作逻辑
-    assign op_add = inst_addiu | inst_jal | inst_jalr | inst_addu;
+    assign op_add = inst_addiu | inst_jal | inst_jalr | inst_addu | inst_lw | inst_sw;
     assign op_sub = inst_sub | inst_subu;
     assign op_slt = 1'b0;
     assign op_sltu = 1'b0;
     assign op_and = 1'b0;
     assign op_nor = 1'b0;
     assign op_or = inst_ori | inst_or;
-    assign op_xor = 1'b0;
+    assign op_xor = inst_xor;
     assign op_sll = inst_sll;
     assign op_srl = 1'b0;
     assign op_sra = 1'b0;
@@ -271,21 +314,21 @@ module ID(
 
     //关于指令写回的内容
     // load and store enable
-    assign data_ram_en = inst_lw;
+    assign data_ram_en = inst_lw | inst_sw;
 
     // write enable
-    assign data_ram_wen = 1'b0;
+    assign data_ram_wen = inst_sw;
 
 
     //一些写回数的操作,包括是否要写回regfile寄存器堆、要存在哪一位里
     // regfile store enable
     assign rf_we = inst_ori | inst_lui | inst_addiu | inst_addu | inst_sub | inst_subu | inst_jal | inst_jalr
-                  |inst_sll | inst_or  | inst_lw;
+                  |inst_sll | inst_or  | inst_lw | inst_xor;
 
 
 
     // store in [rd]
-    assign sel_rf_dst[0] = inst_sub | inst_subu |inst_addu | inst_sll | inst_or;        //例如要是想存在rd堆里
+    assign sel_rf_dst[0] = inst_sub | inst_subu |inst_addu | inst_sll | inst_or | inst_xor;        //例如要是想存在rd堆里
     // store in [rt] 
     assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu| inst_lw;
     // store in [31]
@@ -298,6 +341,8 @@ module ID(
 
     // 0 from alu_res ; 1 from ld_res
     assign sel_rf_res = inst_lw; 
+    
+//    assign stallreq_for_load = inst_lw ;
 
     //一条指令解码结束，把信息封装好，传给EX段
     assign id_to_ex_bus = {

@@ -31,6 +31,8 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
     wire [`EX_TO_RF_WD-1:0] ex_to_rf_bus; //ex段前向的信息
     wire [`MEM_TO_RF_WD-1:0] mem_to_rf_bus; //mem段前向的信息
     wire [`StallBus-1:0] stall;
+    wire [7:0] memop_from_ex;
+    wire stallreq;
 
     IF u_IF(
     	.clk             (clk             ),
@@ -49,7 +51,10 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
     	.clk             (clk             ),
         .rst             (rst             ),
         .stall           (stall           ),
-        .stallreq        (stallreq        ),
+        .stallreq_for_load  (stallreq     ),
+        .memop_from_ex   (memop_from_ex   ),
+//        .ex_ram_read     (ex_to_mem_bus[38]),
+//        .stall_for_load  (stall_for_load  ),
         .if_to_id_bus    (if_to_id_bus    ),            //而if_to_id_bus作为ID段的输入,即为连线
         .inst_sram_rdata (inst_sram_rdata ),
         .wb_to_rf_bus    (wb_to_rf_bus    ),
@@ -65,6 +70,7 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
         .stall           (stall           ),
         .id_to_ex_bus    (id_to_ex_bus    ),
         .ex_to_mem_bus   (ex_to_mem_bus   ),
+        .memop_from_ex   (memop_from_ex   ),
         .data_sram_en    (data_sram_en    ),
         .data_sram_wen   (data_sram_wen   ),
         .data_sram_addr  (data_sram_addr  ),
@@ -95,8 +101,9 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
     );
 
     CTRL u_CTRL(
-    	.rst   (rst   ),
-        .stall (stall )
+    	.rst               (rst               ),
+    	.stallreq_for_load (stallreq          ),
+        .stall             (stall             )
     );
     
 endmodule

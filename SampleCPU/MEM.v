@@ -43,9 +43,10 @@ module MEM(
 
     assign {
         mem_op,
-        mem_pc,         // 75:44
-        data_ram_en,    // 43
-        data_ram_wen,   // 42:39
+        mem_pc,          // 79:48
+        data_ram_en,    // 47
+        data_ram_wen,   // 46:43
+        data_ram_sel,   // 42:39
         sel_rf_res,     // 38
         rf_we,          // 37
         rf_waddr,       // 36:32
@@ -57,7 +58,7 @@ module MEM(
 
     assign {
         inst_lb, inst_lbu, inst_lh, inst_lhu,
-        inst_lw, inst_sb,  inst_sh, inst_sw,
+        inst_lw, inst_sb,  inst_sh, inst_sw
     } = mem_op;
 
     wire [7:0] b_data;

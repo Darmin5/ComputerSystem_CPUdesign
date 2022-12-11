@@ -4,10 +4,13 @@ module EX(
     input wire rst,
     // input wire flush,
     input wire [`StallBus-1:0] stall,
+    
 
     input wire [`ID_TO_EX_WD-1:0] id_to_ex_bus,
 
     output wire [`EX_TO_MEM_WD-1:0] ex_to_mem_bus,
+    
+    output wire [7:0] memop_from_ex,
 
     output wire data_sram_en,
     output wire [3:0] data_sram_wen,
@@ -115,15 +118,18 @@ module EX(
     assign ex_result = alu_result;
 
     assign ex_to_mem_bus = {        //将EX段封装成一条总线
-        mem_op,
-        ex_pc,          // 75:44
-        data_ram_en,    // 43
-        data_ram_wen,   // 42:39
+        mem_op,         // 87:80
+        ex_pc,          // 79:48
+        data_ram_en,    // 47
+        data_ram_wen,   // 46:43
+        data_ram_sel,   // 42:39
         sel_rf_res,     // 38
         rf_we,          // 37
         rf_waddr,       // 36:32
         ex_result       // 31:0
     };
+    
+    assign memop_from_ex = mem_op;
 
     //forwarding线路，解决数据相关的
     assign ex_to_rf_bus = {
