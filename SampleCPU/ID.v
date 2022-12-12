@@ -66,8 +66,8 @@ module ID(
     end
     
     //从inst ram中取指
-//    assign inst = ce ? flag ? buf_inst : inst_sram_rdata : 32'b0;
-    assign inst = inst_sram_rdata;
+   assign inst = ce ? flag ? buf_inst : inst_sram_rdata : 32'b0;
+    // assign inst = inst_sram_rdata;
     
 //    assign stall_for_load = ex_ram_read &((ex_rf_we && (ex_rf_waddr == rs)) | (ex_rf_we && (ex_rf_waddr==rt)));
     
