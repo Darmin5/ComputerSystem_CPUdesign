@@ -50,6 +50,7 @@ module WB(
         rf_wdata
     };
 
+    //trace 比对机制
     assign debug_wb_pc = wb_pc;
     assign debug_wb_rf_wen = {4{rf_we}};
     assign debug_wb_rf_wnum = rf_waddr;

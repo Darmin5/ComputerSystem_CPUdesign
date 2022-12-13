@@ -4,20 +4,24 @@ module EX(
     input wire rst,
     // input wire flush,
     input wire [`StallBus-1:0] stall,
+    
 
     input wire [`ID_TO_EX_WD-1:0] id_to_ex_bus,
 
     output wire [`EX_TO_MEM_WD-1:0] ex_to_mem_bus,
+    
+    output wire [7:0] memop_from_ex,
 
     output wire data_sram_en,
     output wire [3:0] data_sram_wen,
     output wire [31:0] data_sram_addr,
-    output wire [31:0] data_sram_wdata
+    output wire [31:0] data_sram_wdata,
+    output wire [`EX_TO_RF_WD-1:0] ex_to_rf_bus       //前推线路
 );
 
     reg [`ID_TO_EX_WD-1:0] id_to_ex_bus_r;
 
-    always @ (posedge clk) begin
+    always @ (posedge clk) begin        //和ID一样，在开始时先将ID段传来的信息锁到寄存器里,在下一个周期取寄存器中的内容执行
         if (rst) begin
             id_to_ex_bus_r <= `ID_TO_EX_WD'b0;
         end
@@ -43,8 +47,10 @@ module EX(
     wire sel_rf_res;
     wire [31:0] rf_rdata1, rf_rdata2;
     reg is_in_delayslot;
+    wire [7:0] mem_op;
 
-    assign {
+    assign {            //将信息进行解包
+        mem_op,
         ex_pc,          // 148:117
         inst,           // 116:85
         alu_op,         // 84:83
@@ -59,6 +65,8 @@ module EX(
         rf_rdata2          // 31:0
     } = id_to_ex_bus_r;
 
+
+    //alu运算单元
     wire [31:0] imm_sign_extend, imm_zero_extend, sa_zero_extend;
     assign imm_sign_extend = {{16{inst[15]}},inst[15:0]};
     assign imm_zero_extend = {16'b0, inst[15:0]};
@@ -80,17 +88,55 @@ module EX(
         .alu_src2    (alu_src2    ),
         .alu_result  (alu_result  )
     );
+    //这里和书上讲的有点不太一样，书上的访存请求是MEN段发出的，而这里的访存请求是EX段发出的
+    //load & store（to do）
+    wire inst_lb, inst_lbu,  inst_lh, inst_lhu, inst_lw;
+    wire inst_sb, inst_sh,   inst_sw;
+
+    assign {inst_lb, inst_lbu, inst_lh, inst_lhu,
+            inst_lw, inst_sb,  inst_sh, inst_sw} = mem_op;
+
+    wire [3:0] byte_sel;
+    wire [3:0] data_ram_sel;
+    decoder_2_4 u_decoder_2_4(
+        .in  (ex_result[1:0]),
+        .out (byte_sel      )
+    );  
+
+    assign data_ram_sel = inst_sb | inst_lb | inst_lbu ? byte_sel :
+                      inst_sh | inst_lh | inst_lhu ? {{2{byte_sel[2]}},{2{byte_sel[0]}}} :
+                      inst_sw | inst_lw ? 4'b1111 : 4'b0000;
+
+    assign data_sram_en     = data_ram_en;
+    assign data_sram_wen    = {4{data_ram_wen}}&data_ram_sel;
+    assign data_sram_addr   = ex_result; 
+    assign data_sram_wdata  = inst_sb ? {4{rf_rdata2[7:0]}}  :
+                              inst_sh ? {2{rf_rdata2[15:0]}} : rf_rdata2;
+
+
 
     assign ex_result = alu_result;
 
-    assign ex_to_mem_bus = {
-        ex_pc,          // 75:44
-        data_ram_en,    // 43
-        data_ram_wen,   // 42:39
+    assign ex_to_mem_bus = {        //将EX段封装成一条总线
+        mem_op,         // 87:80
+        ex_pc,          // 79:48
+        data_ram_en,    // 47
+        data_ram_wen,   // 46:43
+        data_ram_sel,   // 42:39
         sel_rf_res,     // 38
         rf_we,          // 37
         rf_waddr,       // 36:32
         ex_result       // 31:0
+    };
+    
+    assign memop_from_ex = mem_op;
+
+    //forwarding线路，解决数据相关的
+    assign ex_to_rf_bus = {
+        // hilo_bus,
+        rf_we,
+        rf_waddr,
+        ex_result
     };
 
     // MUL part

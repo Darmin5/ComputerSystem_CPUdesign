@@ -1,5 +1,5 @@
 `include "lib/defines.vh"
-module mycpu_core(
+module mycpu_core(          //上课所说的流水线中的连线就是在这部分实现
     input wire clk,
     input wire rst,
     input wire [5:0] int,
@@ -25,17 +25,21 @@ module mycpu_core(
     wire [`ID_TO_EX_WD-1:0] id_to_ex_bus;
     wire [`EX_TO_MEM_WD-1:0] ex_to_mem_bus;
     wire [`MEM_TO_WB_WD-1:0] mem_to_wb_bus;
-    wire [`BR_WD-1:0] br_bus; 
+    wire [`BR_WD-1:0] br_bus;           //跳转指令
     wire [`DATA_SRAM_WD-1:0] ex_dt_sram_bus;
-    wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus;
+    wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus;       //..._to_rf_bus即为数据通路，是用来进行forwarding解决RAW数据相关的
+    wire [`EX_TO_RF_WD-1:0] ex_to_rf_bus; //ex段前向的信息
+    wire [`MEM_TO_RF_WD-1:0] mem_to_rf_bus; //mem段前向的信息
     wire [`StallBus-1:0] stall;
+    wire [7:0] memop_from_ex;
+    wire stallreq;
 
     IF u_IF(
     	.clk             (clk             ),
         .rst             (rst             ),
         .stall           (stall           ),
         .br_bus          (br_bus          ),
-        .if_to_id_bus    (if_to_id_bus    ),
+        .if_to_id_bus    (if_to_id_bus    ),            //例如这里if_to_id_bus是IF段的输出
         .inst_sram_en    (inst_sram_en    ),
         .inst_sram_wen   (inst_sram_wen   ),
         .inst_sram_addr  (inst_sram_addr  ),
@@ -47,10 +51,15 @@ module mycpu_core(
     	.clk             (clk             ),
         .rst             (rst             ),
         .stall           (stall           ),
-        .stallreq        (stallreq        ),
-        .if_to_id_bus    (if_to_id_bus    ),
+        .stallreq_for_load  (stallreq     ),
+        .memop_from_ex   (memop_from_ex   ),
+//        .ex_ram_read     (ex_to_mem_bus[38]),
+//        .stall_for_load  (stall_for_load  ),
+        .if_to_id_bus    (if_to_id_bus    ),            //而if_to_id_bus作为ID段的输入,即为连线
         .inst_sram_rdata (inst_sram_rdata ),
         .wb_to_rf_bus    (wb_to_rf_bus    ),
+        .ex_to_rf_bus    (ex_to_rf_bus    ),
+        .mem_to_rf_bus   (mem_to_rf_bus   ),
         .id_to_ex_bus    (id_to_ex_bus    ),
         .br_bus          (br_bus          )
     );
@@ -61,10 +70,12 @@ module mycpu_core(
         .stall           (stall           ),
         .id_to_ex_bus    (id_to_ex_bus    ),
         .ex_to_mem_bus   (ex_to_mem_bus   ),
+        .memop_from_ex   (memop_from_ex   ),
         .data_sram_en    (data_sram_en    ),
         .data_sram_wen   (data_sram_wen   ),
         .data_sram_addr  (data_sram_addr  ),
-        .data_sram_wdata (data_sram_wdata )
+        .data_sram_wdata (data_sram_wdata ),
+        .ex_to_rf_bus    (ex_to_rf_bus    )
     );
 
     MEM u_MEM(
@@ -73,7 +84,8 @@ module mycpu_core(
         .stall           (stall           ),
         .ex_to_mem_bus   (ex_to_mem_bus   ),
         .data_sram_rdata (data_sram_rdata ),
-        .mem_to_wb_bus   (mem_to_wb_bus   )
+        .mem_to_wb_bus   (mem_to_wb_bus   ),
+        .mem_to_rf_bus   (mem_to_rf_bus   )
     );
     
     WB u_WB(
@@ -89,8 +101,9 @@ module mycpu_core(
     );
 
     CTRL u_CTRL(
-    	.rst   (rst   ),
-        .stall (stall )
+    	.rst               (rst               ),
+    	.stallreq_for_load (stallreq          ),
+        .stall             (stall             )
     );
     
 endmodule
