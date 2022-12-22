@@ -66,8 +66,8 @@ module ID(
     end
     
     //从inst ram中取指
-   assign inst = ce ? flag ? buf_inst : inst_sram_rdata : 32'b0;
-    // assign inst = inst_sram_rdata;
+    assign inst = ce ? flag ? buf_inst : inst_sram_rdata : 32'b0;
+//    assign inst = inst_sram_rdata;
     
 //    assign stall_for_load = ex_ram_read &((ex_rf_we && (ex_rf_waddr == rs)) | (ex_rf_we && (ex_rf_waddr==rt)));
     
@@ -242,7 +242,9 @@ module ID(
     assign inst_ori     = op_d[6'b00_1101];
     assign inst_lui     = op_d[6'b00_1111];
     assign inst_addiu   = op_d[6'b00_1001];
+    assign inst_addi    = op_d[6'b00_1000];
     assign inst_addu    = op_d[6'b00_0000] & func_d[6'b10_0001];
+    assign inst_add     = op_d[6'b00_0000] & func_d[6'b10_0000];
     assign inst_beq     = op_d[6'b00_0100];
     assign inst_sub     = op_d[6'b00_0000] & func_d[6'b10_0010];
     assign inst_subu    = op_d[6'b00_0000] & func_d[6'b10_0011];
@@ -251,6 +253,7 @@ module ID(
     assign inst_jr      = op_d[6'b00_0000] & func_d[6'b00_1000];
     assign inst_jalr    = op_d[6'b00_0000] & func_d[6'b00_1001];
     assign inst_sll     = op_d[6'b00_0000] & func_d[6'b00_0000];
+    assign inst_sllv    = op_d[6'b00_0000] & func_d[6'b00_0100];
     assign inst_or      = op_d[6'b00_0000] & func_d[6'b10_0101];  
     assign inst_lw      = op_d[6'b10_0011];
     assign inst_lb      = op_d[6'b10_0000];
@@ -261,45 +264,62 @@ module ID(
     assign inst_sh      = op_d[6'b10_1001];
     assign inst_sw      = op_d[6'b10_1011];
     assign inst_xor     = op_d[6'b00_0000] & func_d[6'b10_0110];
+    assign inst_xori    = op_d[6'b00_1110];
+    assign inst_sltu    = op_d[6'b00_0000] & func_d[6'b10_1011];
+    assign inst_slt     = op_d[6'b00_0000] & func_d[6'b10_1010];
+    assign inst_slti    = op_d[6'b00_1010];
+    assign inst_sltiu   = op_d[6'b00_1011];
+    assign inst_srav    = op_d[6'b00_0000] & func_d[6'b00_0111];
+    assign inst_sra     = op_d[6'b00_0000] & func_d[6'b00_0011];
+    assign inst_bne     = op_d[6'b00_0101];
+    assign inst_and     = op_d[6'b00_0000] & func_d[6'b10_0100];
+    assign inst_andi    = op_d[6'b00_1100];
+    assign inst_nor     = op_d[6'b00_0000] & func_d[6'b10_0111];
+    assign inst_srl     = op_d[6'b00_0000] & func_d[6'b00_0010];
+    assign inst_srlv    = op_d[6'b00_0000] & func_d[6'b00_0110];
 
 
     //选操作数      这里src1和src2分别是两个存储操作数的寄存器，具体怎么选操作数，在ex段写
     // rs to reg1
-    assign sel_alu_src1[0] = inst_ori | inst_addiu | inst_sub | inst_subu | inst_addu
-                            |inst_or  | inst_xor   | inst_sw;
+    assign sel_alu_src1[0] =  inst_ori| inst_addiu | inst_sub | inst_subu | inst_addu | inst_slti
+                            | inst_or | inst_xor   | inst_sw  | inst_srav | inst_sltu | inst_slt
+                            | inst_lw | inst_sltiu | inst_add | inst_addi | inst_and  | inst_andi
+                            | inst_nor| inst_xori  | inst_sllv| inst_srlv;
 
     // pc to reg1
     assign sel_alu_src1[1] = inst_jal | inst_jalr;
 
     // sa_zero_extend to reg1
-    assign sel_alu_src1[2] = inst_sll;
+    assign sel_alu_src1[2] = inst_sll | inst_sra | inst_srl;
 
     
     // rt to reg2
-    assign sel_alu_src2[0] = inst_sub | inst_subu | inst_addu | inst_sll | inst_or | inst_xor;
+    assign sel_alu_src2[0] = inst_sub | inst_subu | inst_addu | inst_sll | inst_or | inst_xor
+                            |inst_srav| inst_sltu | inst_slt  | inst_add | inst_and| inst_nor
+                            |inst_sllv| inst_sra  | inst_srl  | inst_srlv;
     
     // imm_sign_extend to reg2
-    assign sel_alu_src2[1] = inst_lui | inst_addiu | inst_lw  | inst_sw;
+    assign sel_alu_src2[1] = inst_lui | inst_addiu | inst_lw  | inst_sw  | inst_slti| inst_sltiu | inst_addi;
 
     // 32'b8 to reg2
     assign sel_alu_src2[2] = inst_jal | inst_jalr;
 
     // imm_zero_extend to reg2
-    assign sel_alu_src2[3] = inst_ori;
+    assign sel_alu_src2[3] = inst_ori | inst_andi | inst_xori;
 
 
     //choose the op to be applied   选操作逻辑
-    assign op_add = inst_addiu | inst_jal | inst_jalr | inst_addu | inst_lw | inst_sw;
+    assign op_add = inst_addiu | inst_jal | inst_jalr | inst_addu | inst_lw | inst_sw | inst_add | inst_addi;
     assign op_sub = inst_sub | inst_subu;
-    assign op_slt = 1'b0;
-    assign op_sltu = 1'b0;
-    assign op_and = 1'b0;
-    assign op_nor = 1'b0;
+    assign op_slt = inst_slt | inst_slti;
+    assign op_sltu = inst_sltu | inst_sltiu;
+    assign op_and = inst_and | inst_andi;
+    assign op_nor = inst_nor;
     assign op_or = inst_ori | inst_or;
-    assign op_xor = inst_xor;
-    assign op_sll = inst_sll;
-    assign op_srl = 1'b0;
-    assign op_sra = 1'b0;
+    assign op_xor = inst_xor| inst_xori;
+    assign op_sll = inst_sll| inst_sllv;
+    assign op_srl = inst_srl| inst_srlv;
+    assign op_sra = inst_srav| inst_sra;
     assign op_lui = inst_lui;
 
     assign alu_op = {op_add, op_sub, op_slt, op_sltu,
@@ -323,14 +343,17 @@ module ID(
     //一些写回数的操作,包括是否要写回regfile寄存器堆、要存在哪一位里
     // regfile store enable
     assign rf_we = inst_ori | inst_lui | inst_addiu | inst_addu | inst_sub | inst_subu | inst_jal | inst_jalr
-                  |inst_sll | inst_or  | inst_lw | inst_xor;
+                  |inst_sll | inst_or  | inst_lw | inst_xor | inst_srav | inst_sltu | inst_slt | inst_slti | inst_sltiu
+                  |inst_add | inst_addi| inst_and| inst_andi| inst_nor  | inst_xori | inst_sllv| inst_sra  | inst_srl
+                  |inst_srlv;
 
 
 
     // store in [rd]
-    assign sel_rf_dst[0] = inst_sub | inst_subu |inst_addu | inst_sll | inst_or | inst_xor;        //例如要是想存在rd堆里
+    assign sel_rf_dst[0] = inst_sub | inst_subu |inst_addu | inst_sll | inst_or | inst_xor | inst_srav | inst_sltu | inst_slt
+                          |inst_add | inst_and  |inst_nor  | inst_sllv| inst_sra| inst_srl | inst_srlv;        //例如要是想存在rd堆里
     // store in [rt] 
-    assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu| inst_lw;
+    assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu| inst_lw | inst_slti| inst_sltiu | inst_addi | inst_andi | inst_xori;
     // store in [31]
     assign sel_rf_dst[2] = inst_jal | inst_jalr;            //jalr不是存在rd中吗？ --默认先存到31位寄存器中
 
@@ -374,9 +397,12 @@ module ID(
 
     assign rs_eq_rt = (rdata1 == rdata2);
 
+
     assign br_e = inst_beq & rs_eq_rt 
+                | inst_bne & ~rs_eq_rt
                 | inst_j |inst_jal | inst_jalr | inst_jr;
     assign br_addr = inst_beq  ? (pc_plus_4 + {{14{inst[15]}},inst[15:0],2'b0}) 
+                    :inst_bne  ? (pc_plus_4 + {{14{inst[15]}},inst[15:0],2'b0}) 
                     :inst_j    ? {id_pc[31:28],instr_index,2'b0}
                     :inst_jal  ? {id_pc[32:28],instr_index,2'b0}
                     :inst_jr   ? rdata1

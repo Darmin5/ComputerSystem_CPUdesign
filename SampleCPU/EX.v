@@ -88,7 +88,7 @@ module EX(
         .alu_src2    (alu_src2    ),
         .alu_result  (alu_result  )
     );
-    //这里和书上讲的有点不太一样，书上的访存请求是MEN段发出的，而这里的访存请求是EX段发出的
+    //这里和书上讲的有点不太一样，书上的访存请求是MEM段发出的，而这里的访存请求是EX段发出的
     //load & store（to do）
     wire inst_lb, inst_lbu,  inst_lh, inst_lhu, inst_lw;
     wire inst_sb, inst_sh,   inst_sw;
@@ -96,22 +96,24 @@ module EX(
     assign {inst_lb, inst_lbu, inst_lh, inst_lhu,
             inst_lw, inst_sb,  inst_sh, inst_sw} = mem_op;
 
-    wire [3:0] byte_sel;
-    wire [3:0] data_ram_sel;
-    decoder_2_4 u_decoder_2_4(
-        .in  (ex_result[1:0]),
-        .out (byte_sel      )
-    );  
 
-    assign data_ram_sel = inst_sb | inst_lb | inst_lbu ? byte_sel :
-                      inst_sh | inst_lh | inst_lhu ? {{2{byte_sel[2]}},{2{byte_sel[0]}}} :
-                      inst_sw | inst_lw ? 4'b1111 : 4'b0000;
-
-    assign data_sram_en     = data_ram_en;
-    assign data_sram_wen    = {4{data_ram_wen}}&data_ram_sel;
     assign data_sram_addr   = ex_result; 
-    assign data_sram_wdata  = inst_sb ? {4{rf_rdata2[7:0]}}  :
-                              inst_sh ? {2{rf_rdata2[15:0]}} : rf_rdata2;
+
+    assign data_sram_en = data_ram_en;
+    assign data_sram_wen = inst_sw ? 4'b1111:
+                           inst_sb & alu_result[1:0]==2'b00 ? 4'b0001:
+                           inst_sb & alu_result[1:0]==2'b01 ? 4'b0010:
+                           inst_sb & alu_result[1:0]==2'b10 ? 4'b0100:
+                           inst_sb & alu_result[1:0]==2'b11 ? 4'b1000:
+                           inst_sh & alu_result[1:0]==2'b00 ? 4'b0011:
+                           inst_sh & alu_result[1:0]==2'b10 ? 4'b1100:
+                           4'b0;
+                           
+    assign data_sram_wdata = inst_sw ? rf_rdata2 :
+                             inst_sb ? {4{rf_rdata2[7:0]}} :
+                             inst_sh ? {2{rf_rdata2[15:0]}}:
+                             32'b0;
+                           
 
 
 
@@ -122,7 +124,7 @@ module EX(
         ex_pc,          // 79:48
         data_ram_en,    // 47
         data_ram_wen,   // 46:43
-        data_ram_sel,   // 42:39
+//        data_ram_sel,   // 42:39
         sel_rf_res,     // 38
         rf_we,          // 37
         rf_waddr,       // 36:32
