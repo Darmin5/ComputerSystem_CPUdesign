@@ -13,6 +13,7 @@ module ID(
     input wire [`IF_TO_ID_WD-1:0] if_to_id_bus,     //if段传到id段的信息
 
     input wire [31:0] inst_sram_rdata,          //指令要读取的数据
+    input wire ex_ram_read,
 
     input wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus, //wb段前向的信息
     input wire [`EX_TO_RF_WD-1:0] ex_to_rf_bus, //ex段前向的信息
@@ -161,10 +162,11 @@ module ID(
     assign pre_inst_is_load = ex_inst_lb | ex_inst_lbu | ex_inst_lh | ex_inst_lhu
                              |ex_inst_lw | ex_inst_sb |  ex_inst_sh | ex_inst_sw ? 1'b1 : 1'b0;
                              
-    assign stallreq1_loadrelate = (pre_inst_is_load == 1'b1 && ex_rf_waddr == rs) ? `Stop : `NoStop;
-    assign stallreq2_loadrelate = (pre_inst_is_load == 1'b1 && ex_rf_waddr == rt) ? `Stop : `NoStop;
+    assign stallreq1_loadrelate = (ex_rf_we == 1'b1 && ex_rf_waddr == rs) ? `Stop : `NoStop;
+    assign stallreq2_loadrelate = (ex_rf_we == 1'b1 && ex_rf_waddr == rt) ? `Stop : `NoStop;
     
-    assign stallreq_for_load = (stallreq1_loadrelate | stallreq2_loadrelate) ? `Stop : `NoStop;
+//    assign stallreq_for_load = (stallreq1_loadrelate | stallreq2_loadrelate) ? `Stop : `NoStop;
+    assign stallreq_for_load = ex_ram_read & (stallreq1_loadrelate | stallreq2_loadrelate);
 
     //hi & lo reg for mul and div(to do)
 
@@ -309,7 +311,8 @@ module ID(
                             | inst_or | inst_xor   | inst_sw  | inst_srav | inst_sltu | inst_slt
                             | inst_lw | inst_sltiu | inst_add | inst_addi | inst_and  | inst_andi
                             | inst_nor| inst_xori  | inst_sllv| inst_srlv | inst_div  | inst_divu
-                            | inst_mult | inst_multu;
+                            | inst_mult | inst_multu | inst_lb| inst_lbu  | inst_lh   | inst_lhu
+                            | inst_sb | inst_sh;
 
     // pc to reg1
     assign sel_alu_src1[1] = inst_jal | inst_jalr | inst_bltzal | inst_bgezal;
@@ -325,7 +328,8 @@ module ID(
                             | inst_mult | inst_multu;
     
     // imm_sign_extend to reg2
-    assign sel_alu_src2[1] = inst_lui | inst_addiu | inst_lw  | inst_sw  | inst_slti| inst_sltiu | inst_addi;
+    assign sel_alu_src2[1] = inst_lui | inst_addiu | inst_lw  | inst_sw  | inst_slti| inst_sltiu | inst_addi
+                            |inst_lb  | inst_lbu   | inst_lh  | inst_lhu | inst_sh | inst_sb;
 
     // 32'b8 to reg2
     assign sel_alu_src2[2] = inst_jal | inst_jalr | inst_bltzal | inst_bgezal;
@@ -336,7 +340,7 @@ module ID(
 
     //choose the op to be applied   选操作逻辑
     assign op_add = inst_addiu | inst_jal | inst_jalr | inst_addu | inst_lw | inst_sw | inst_add | inst_addi | inst_bltzal
-                   |inst_bgezal;
+                   |inst_bgezal| inst_lb  | inst_lbu  | inst_lh   | inst_lhu| inst_sh | inst_sb;
     assign op_sub = inst_sub | inst_subu;
     assign op_slt = inst_slt | inst_slti;
     assign op_sltu = inst_sltu | inst_sltiu;
@@ -361,10 +365,11 @@ module ID(
 
     //关于指令写回的内容
     // load and store enable
-    assign data_ram_en = inst_lw | inst_sw;
+    assign data_ram_en = inst_lw | inst_sw | inst_lb | inst_lbu 
+                        |inst_lh | inst_lhu| inst_sb | inst_sh ;
 
     // write enable
-    assign data_ram_wen = inst_sw;
+    assign data_ram_wen = inst_sw| inst_sb | inst_sh;
 
 
     //一些写回数的操作,包括是否要写回regfile寄存器堆、要存在哪一位里
@@ -372,7 +377,7 @@ module ID(
     assign rf_we = inst_ori | inst_lui | inst_addiu | inst_addu | inst_sub | inst_subu | inst_jal | inst_jalr
                   |inst_sll | inst_or  | inst_lw | inst_xor | inst_srav | inst_sltu | inst_slt | inst_slti | inst_sltiu
                   |inst_add | inst_addi| inst_and| inst_andi| inst_nor  | inst_xori | inst_sllv| inst_sra  | inst_srl
-                  |inst_srlv| inst_bltzal | inst_bgezal | inst_mfhi | inst_mflo;
+                  |inst_srlv| inst_bltzal | inst_bgezal | inst_mfhi | inst_mflo | inst_lb | inst_lbu | inst_lh |inst_lhu;
 
 
 
@@ -380,7 +385,8 @@ module ID(
     assign sel_rf_dst[0] = inst_sub | inst_subu |inst_addu | inst_sll | inst_or | inst_xor | inst_srav | inst_sltu | inst_slt
                           |inst_add | inst_and  |inst_nor  | inst_sllv| inst_sra| inst_srl | inst_srlv | inst_mfhi | inst_mflo;        //例如要是想存在rd堆里
     // store in [rt] 
-    assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu| inst_lw | inst_slti| inst_sltiu | inst_addi | inst_andi | inst_xori;
+    assign sel_rf_dst[1] = inst_ori | inst_lui | inst_addiu| inst_lw | inst_slti| inst_sltiu | inst_addi | inst_andi | inst_xori
+                          |inst_lb  | inst_lbu | inst_lh | inst_lhu;
     // store in [31]
     assign sel_rf_dst[2] = inst_jal | inst_jalr| inst_bltzal | inst_bgezal;            //jalr不是存在rd中吗？ --默认先存到31位寄存器中
 
@@ -390,7 +396,7 @@ module ID(
                     | {5{sel_rf_dst[2]}} & 32'd31;
 
     // 0 from alu_res ; 1 from ld_res
-    assign sel_rf_res = inst_lw; 
+    assign sel_rf_res = inst_lw | inst_lb | inst_lbu | inst_lh | inst_lhu; 
     
 //    assign stallreq_for_load = inst_lw ;
 

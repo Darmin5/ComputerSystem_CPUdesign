@@ -61,6 +61,7 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
         .memop_from_ex   (memop_from_ex   ),
 //        .ex_ram_read     (ex_to_mem_bus[38]),
 //        .stall_for_load  (stall_for_load  ),
+        .ex_ram_read     (ex_to_mem_bus[38]),
         .if_to_id_bus    (if_to_id_bus    ),            //而if_to_id_bus作为ID段的输入,即为连线
         .inst_sram_rdata (inst_sram_rdata ),
         .wb_to_rf_bus    (wb_to_rf_bus    ),

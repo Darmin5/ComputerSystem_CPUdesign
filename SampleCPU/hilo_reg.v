@@ -7,8 +7,7 @@ module hilo_reg(
 
     input wire [65:0] ex_hilo_bus,
     input wire [65:0] mem_hilo_bus,
-
-    
+  
     input wire [65:0] hilo_bus,
 
     output reg [31:0] hi_data,
