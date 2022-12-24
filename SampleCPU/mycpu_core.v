@@ -124,15 +124,6 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
         .rst                (rst                   ),
         .stall              (stall                 ),
 
-        // .ex_hi_we           (ex_to_mem_bus[146]    ),
-        // .ex_lo_we           (ex_to_mem_bus[145]    ),
-        // .ex_hi_in           (ex_to_mem_bus[144:113]),
-        // .ex_lo_in           (ex_to_mem_bus[112:81] ),
-
-        // .mem_hi_we          (mem_to_wb_bus[135]    ),
-        // .mem_lo_we          (mem_to_wb_bus[134]    ),
-        // .mem_hi_in          (mem_to_wb_bus[133:102]),
-        // .mem_lo_in          (mem_to_wb_bus[101:70] ),
         .ex_hilo_bus        (ex_hilo_bus           ),
         .mem_hilo_bus       (mem_hilo_bus          ),
 
