@@ -8,6 +8,7 @@ module MEM(
     input wire [`EX_TO_MEM_WD-1:0] ex_to_mem_bus,
     input wire [31:0] data_sram_rdata,
 
+    output wire [65:0] mem_hilo_bus,
     output wire [`MEM_TO_WB_WD-1:0] mem_to_wb_bus,
     output wire [`MEM_TO_RF_WD-1:0] mem_to_rf_bus       //前推线路
 );
@@ -40,8 +41,10 @@ module MEM(
     wire [31:0] ex_result;
     wire [31:0] mem_result;
     wire [7:0] mem_op;
+    wire [65:0] hilo_bus;
 
     assign {
+        hilo_bus,
         mem_op,
         mem_pc,          // 79:48
         data_ram_en,    // 47
@@ -82,11 +85,14 @@ module MEM(
     assign rf_wdata = sel_rf_res & data_ram_en ? mem_result : ex_result;
 
     assign mem_to_wb_bus = {
+        hilo_bus,
         mem_pc,     // 69:38
         rf_we,      // 37
         rf_waddr,   // 36:32
         rf_wdata    // 31:0
     };
+
+    assign mem_hilo_bus = hilo_bus;
 
     //forwarding线路,解决数据相关的,其实就是把是否要写回（rf_we），写回到哪儿(rf_waddr)，写回的内容(rf_wdata)等信息封装成一条线,在ID段解包
     assign mem_to_rf_bus = {
