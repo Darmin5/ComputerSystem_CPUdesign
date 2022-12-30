@@ -4,6 +4,8 @@ module EX(
     input wire rst,
     // input wire flush,
     input wire [`StallBus-1:0] stall,
+    input wire [31:0] hi_data,
+    input wire [31:0] lo_data,
     
 
     input wire [`ID_TO_EX_WD-1:0] id_to_ex_bus,
@@ -11,6 +13,8 @@ module EX(
     output wire [`EX_TO_MEM_WD-1:0] ex_to_mem_bus,
     
     output wire [7:0] memop_from_ex,
+    output wire [65:0] ex_hilo_bus,
+    output wire stallreq_for_ex,
 
     output wire data_sram_en,
     output wire [3:0] data_sram_wen,
@@ -48,8 +52,10 @@ module EX(
     wire [31:0] rf_rdata1, rf_rdata2;
     reg is_in_delayslot;
     wire [7:0] mem_op;
+    wire [8:0] hilo_op;
 
     assign {            //将信息进行解包
+        hilo_op,
         mem_op,
         ex_pc,          // 148:117
         inst,           // 116:85
@@ -73,7 +79,8 @@ module EX(
     assign sa_zero_extend = {27'b0,inst[10:6]};
 
     wire [31:0] alu_src1, alu_src2;
-    wire [31:0] alu_result, ex_result;
+    wire [31:0] alu_result, ex_result,hilo_result;
+    wire [65:0] hilo_bus;
 
     assign alu_src1 = sel_alu_src1[1] ? ex_pc :
                       sel_alu_src1[2] ? sa_zero_extend : rf_rdata1;
@@ -88,46 +95,47 @@ module EX(
         .alu_src2    (alu_src2    ),
         .alu_result  (alu_result  )
     );
-    //这里和书上讲的有点不太一样，书上的访存请求是MEN段发出的，而这里的访存请求是EX段发出的
-    //load & store（to do）
+
+    //store（to do）
     wire inst_lb, inst_lbu,  inst_lh, inst_lhu, inst_lw;
     wire inst_sb, inst_sh,   inst_sw;
 
     assign {inst_lb, inst_lbu, inst_lh, inst_lhu,
             inst_lw, inst_sb,  inst_sh, inst_sw} = mem_op;
 
-    wire [3:0] byte_sel;
-    wire [3:0] data_ram_sel;
-    decoder_2_4 u_decoder_2_4(
-        .in  (ex_result[1:0]),
-        .out (byte_sel      )
-    );  
 
-    assign data_ram_sel = inst_sb | inst_lb | inst_lbu ? byte_sel :
-                      inst_sh | inst_lh | inst_lhu ? {{2{byte_sel[2]}},{2{byte_sel[0]}}} :
-                      inst_sw | inst_lw ? 4'b1111 : 4'b0000;
+    assign data_sram_addr   = alu_result; 
 
-    assign data_sram_en     = data_ram_en;
-    assign data_sram_wen    = {4{data_ram_wen}}&data_ram_sel;
-    assign data_sram_addr   = ex_result; 
-    assign data_sram_wdata  = inst_sb ? {4{rf_rdata2[7:0]}}  :
-                              inst_sh ? {2{rf_rdata2[15:0]}} : rf_rdata2;
-
-
-
-    assign ex_result = alu_result;
+    assign data_sram_en = data_ram_en;
+    assign data_sram_wen = inst_sw ? 4'b1111:
+                           inst_sb & alu_result[1:0]==2'b00 ? 4'b0001:
+                           inst_sb & alu_result[1:0]==2'b01 ? 4'b0010:
+                           inst_sb & alu_result[1:0]==2'b10 ? 4'b0100:
+                           inst_sb & alu_result[1:0]==2'b11 ? 4'b1000:
+                           inst_sh & alu_result[1:0]==2'b00 ? 4'b0011:
+                           inst_sh & alu_result[1:0]==2'b10 ? 4'b1100:
+                           4'b0;
+                           
+    assign data_sram_wdata = inst_sw ? rf_rdata2 :
+                             inst_sb ? {4{rf_rdata2[7:0]}} :
+                             inst_sh ? {2{rf_rdata2[15:0]}}:
+                             32'b0;
+                           
 
     assign ex_to_mem_bus = {        //将EX段封装成一条总线
+        hilo_bus,
         mem_op,         // 87:80
         ex_pc,          // 79:48
         data_ram_en,    // 47
         data_ram_wen,   // 46:43
-        data_ram_sel,   // 42:39
+//        data_ram_sel,   // 42:39
         sel_rf_res,     // 38
         rf_we,          // 37
         rf_waddr,       // 36:32
         ex_result       // 31:0
     };
+
+    
     
     assign memop_from_ex = mem_op;
 
@@ -139,22 +147,69 @@ module EX(
         ex_result
     };
 
+    //HILO part
+    wire inst_mfhi, inst_mflo,  inst_mthi,  inst_mtlo;
+    wire inst_mult, inst_multu, inst_div,   inst_divu;
+    wire inst_mul;
+
+    assign {
+        inst_mfhi, inst_mflo, inst_mthi, inst_mtlo,
+        inst_mult, inst_multu, inst_div, inst_divu,
+        inst_mul
+    } = hilo_op;
+
+    wire hi_we,lo_we;
+    wire [31:0] hi_result, lo_result;
+    
+    wire op_div = inst_div | inst_divu;
+    wire op_mul = inst_mult | inst_multu;
+
+    assign hi_we = inst_mthi | inst_div | inst_divu | inst_mult | inst_multu;
+    assign lo_we = inst_mtlo | inst_div | inst_divu | inst_mult | inst_multu;
+
+    assign hi_result = inst_mthi ? rf_rdata1
+                      :op_mul    ? mul_result[63:32]
+                      :op_div    ? div_result[63:32]
+                      :32'b0;
+
+    assign lo_result = inst_mtlo ? rf_rdata1
+                      :op_mul    ? mul_result[31:0]
+                      :op_div    ? div_result[31:0]
+                      :32'b0;
+    
+    assign hilo_result = inst_mfhi ? hi_data:
+                         inst_mflo ? lo_data:
+                         32'b0;
+
+    assign ex_result = (inst_mfhi | inst_mflo) ? hilo_result :alu_result;
+
+    assign hilo_bus = {
+        hi_we,
+        lo_we,
+        hi_result,
+        lo_result
+    };
+
+    assign ex_hilo_bus = hilo_bus;
+
     // MUL part
     wire [63:0] mul_result;
     wire mul_signed; // 有符号乘法标记
+    
+    assign mul_signed = inst_mult;
 
     mul u_mul(
     	.clk        (clk            ),
         .resetn     (~rst           ),
         .mul_signed (mul_signed     ),
-        .ina        (      ), // 乘法源操作数1
-        .inb        (      ), // 乘法源操作数2
+        .ina        (rf_rdata1      ), // 乘法源操作数1
+        .inb        (rf_rdata2      ), // 乘法源操作数2
         .result     (mul_result     ) // 乘法结果 64bit
     );
 
     // DIV part
     wire [63:0] div_result;
-    wire inst_div, inst_divu;
+//    wire inst_div, inst_divu;
     wire div_ready_i;
     reg stallreq_for_div;
     assign stallreq_for_ex = stallreq_for_div;

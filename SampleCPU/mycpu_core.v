@@ -30,9 +30,15 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
     wire [`WB_TO_RF_WD-1:0] wb_to_rf_bus;       //..._to_rf_bus即为数据通路，是用来进行forwarding解决RAW数据相关的
     wire [`EX_TO_RF_WD-1:0] ex_to_rf_bus; //ex段前向的信息
     wire [`MEM_TO_RF_WD-1:0] mem_to_rf_bus; //mem段前向的信息
+    wire [65:0] ex_hilo_bus;
+    wire [65:0] mem_hilo_bus;
     wire [`StallBus-1:0] stall;
     wire [7:0] memop_from_ex;
     wire stallreq;
+    wire stallreq_ex;
+
+    wire [31:0] hi_data, lo_data;
+    wire [65:0] hilo_bus;
 
     IF u_IF(
     	.clk             (clk             ),
@@ -55,6 +61,7 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
         .memop_from_ex   (memop_from_ex   ),
 //        .ex_ram_read     (ex_to_mem_bus[38]),
 //        .stall_for_load  (stall_for_load  ),
+        .ex_ram_read     (ex_to_mem_bus[38]),
         .if_to_id_bus    (if_to_id_bus    ),            //而if_to_id_bus作为ID段的输入,即为连线
         .inst_sram_rdata (inst_sram_rdata ),
         .wb_to_rf_bus    (wb_to_rf_bus    ),
@@ -71,6 +78,10 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
         .id_to_ex_bus    (id_to_ex_bus    ),
         .ex_to_mem_bus   (ex_to_mem_bus   ),
         .memop_from_ex   (memop_from_ex   ),
+        .ex_hilo_bus     (ex_hilo_bus     ),
+        .stallreq_for_ex (stallreq_ex     ),
+        .hi_data         (hi_data         ),
+        .lo_data         (lo_data         ),
         .data_sram_en    (data_sram_en    ),
         .data_sram_wen   (data_sram_wen   ),
         .data_sram_addr  (data_sram_addr  ),
@@ -83,6 +94,7 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
         .rst             (rst             ),
         .stall           (stall           ),
         .ex_to_mem_bus   (ex_to_mem_bus   ),
+        .mem_hilo_bus    (mem_hilo_bus    ),
         .data_sram_rdata (data_sram_rdata ),
         .mem_to_wb_bus   (mem_to_wb_bus   ),
         .mem_to_rf_bus   (mem_to_rf_bus   )
@@ -94,6 +106,7 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
         .stall             (stall             ),
         .mem_to_wb_bus     (mem_to_wb_bus     ),
         .wb_to_rf_bus      (wb_to_rf_bus      ),
+        .hilo_bus          (hilo_bus          ),
         .debug_wb_pc       (debug_wb_pc       ),
         .debug_wb_rf_wen   (debug_wb_rf_wen   ),
         .debug_wb_rf_wnum  (debug_wb_rf_wnum  ),
@@ -103,7 +116,22 @@ module mycpu_core(          //上课所说的流水线中的连线就是在这�
     CTRL u_CTRL(
     	.rst               (rst               ),
     	.stallreq_for_load (stallreq          ),
+    	.stallreq_for_ex   (stallreq_ex       ),
         .stall             (stall             )
+    );
+
+    hilo_reg u_hilo_reg(
+        .clk                (clk                   ),
+        .rst                (rst                   ),
+        .stall              (stall                 ),
+
+        .ex_hilo_bus        (ex_hilo_bus           ),
+        .mem_hilo_bus       (mem_hilo_bus          ),
+
+        .hilo_bus           (hilo_bus              ),
+
+        .hi_data            (hi_data               ),
+        .lo_data            (lo_data               )
     );
     
 endmodule
